@@ -1,3 +1,19 @@
+known_breached = [
+    "password",
+    "password123",
+    "123456",
+    "qwerty",
+    "letmein",
+    "welcome",
+    "monkey",
+    "dragon",
+    "master",
+    "sunshine"
+]
+
+
+
+
 def check_length(password):
     # Checks password length against NIST SP 800-63B thresholds.
     # Takes a password string. Returns (length_ok: bool, length_verdict: str).
@@ -56,6 +72,15 @@ def check_rotation(rotation_interval):
     rotation_ok = rotation_interval <= 12
 
     return rotation_ok, rotation_verdict
+
+
+def check_breach(password, known_breached):
+    # Checks whether a password appears in the known breached password list.
+    # Using "in" checks whether the password exists in the list.
+    not_breached = password not in known_breached
+
+    return not_breached
+
 
 
 def audit_password(account, username, password, rotation_interval):
