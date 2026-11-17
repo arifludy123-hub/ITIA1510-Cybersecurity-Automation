@@ -3,6 +3,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 
 
 # The policy dictionary keeps security rules in one place.
@@ -16,6 +17,10 @@ policy = {
     "check_breach_list": True,
     "history_runs": 3
 }
+
+
+# Store every check run in this audit log file.
+AUDIT_LOG = "audit_log.jsonl"
 
 
 def check_length(password, policy=policy):
@@ -173,6 +178,37 @@ def save_history(history, filepath):
         json.dump(history, f, indent=2)
 
 
+def log_check(name, username, result, log_path):
+    # UTC provides one consistent time standard for comparing audit events.
+    entry = {
+        "time": datetime.now(timezone.utc).isoformat(),
+        "check": name,
+        "username": username,
+        "result": result
+    }
+
+    # Append mode adds a new entry without deleting existing log entries.
+    with open(log_path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def read_audit_log(log_path):
+    # Return an empty list if the audit log does not exist yet.
+    if not os.path.exists(log_path):
+        return []
+
+    entries = []
+
+    with open(log_path, "r") as f:
+        for line in f:
+            if not line.strip():
+                continue
+
+            entries.append(json.loads(line))
+
+    return entries
+
+
 def breach_verdicts(username, credentials, known_breached):
     # Only include accounts belonging to the requested username.
     accounts = []
@@ -281,6 +317,10 @@ def run_check(name, username, credentials, known_breached):
     else:
         # Refuse unknown names instead of accidentally running the wrong check.
         result = {"error": "unknown check"}
+
+    # Logging here records every requested check in one central location.
+    # This avoids repeating the same logging code in each verdict function.
+    log_check(name, username, result, AUDIT_LOG)
 
     return result
 
@@ -534,3 +574,7 @@ if __name__ == "__main__":
     # Save all check results in one JSON file.
     with open("all_checks.json", "w") as f:
         json.dump(all_checks, f, indent=2)
+
+    # Count and display all recorded check entries.
+    audit_entries = read_audit_log(AUDIT_LOG)
+    print(f"audit_log.jsonl holds {len(audit_entries)} entries")

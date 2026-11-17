@@ -1,4 +1,10 @@
 
+# ITIA 1510 - Cybersecurity Automation
+
+import json
+import os
+import password_checker
+
 from password_checker import (
     check_length,
     check_digit,
@@ -17,14 +23,18 @@ from password_checker import (
     length_verdicts,
     rotation_verdicts,
     CHECK_NAMES,
-    run_check
+    run_check,
+    log_check,
+    read_audit_log
 )
-
-import json
 
 
 # Load the breach list from the external file.
 known_breached = load_breached("breached.txt")
+
+# Send all test run_check() calls to a separate test log.
+# This prevents the tests from changing the real audit_log.jsonl.
+password_checker.AUDIT_LOG = "test_audit_log.jsonl"
 
 
 # Test check_length with a weak password.
@@ -208,8 +218,6 @@ for credential in credentials:
 print("PASS: breach_verdicts did not include any passwords")
 
 
-
-
 # Test length_verdicts for jsmith.
 result = length_verdicts("jsmith", credentials, known_breached)
 
@@ -271,6 +279,72 @@ result = run_check(
 assert result == {"error": "unknown check"}
 
 print("PASS: run_check refused a name that is not one of its checks")
+
+
+# Week 13: Remove the previous test log before starting new log tests.
+if os.path.exists("test_audit_log.jsonl"):
+    os.remove("test_audit_log.jsonl")
+
+
+# Test that log_check writes exactly the required keys.
+sample_result = {"status": "test passed"}
+
+log_check(
+    "check_length",
+    "jsmith",
+    sample_result,
+    "test_audit_log.jsonl"
+)
+
+entries = read_audit_log("test_audit_log.jsonl")
+
+assert len(entries) == 1
+assert set(entries[0].keys()) == {
+    "check",
+    "result",
+    "time",
+    "username"
+}
+assert entries[0]["check"] == "check_length"
+assert entries[0]["username"] == "jsmith"
+assert entries[0]["result"] == sample_result
+
+print("PASS: log_check wrote an entry with exactly the required keys")
+
+
+# Test that run_check logs successful and refused checks in order.
+run_check(
+    "check_length",
+    "jsmith",
+    credentials,
+    known_breached
+)
+
+run_check(
+    "reset_password",
+    "jsmith",
+    credentials,
+    known_breached
+)
+
+entries = read_audit_log("test_audit_log.jsonl")
+
+assert entries[-2]["check"] == "check_length"
+assert entries[-1]["check"] == "reset_password"
+assert entries[-1]["result"] == {"error": "unknown check"}
+
+print("PASS: run_check logged both supported and refused checks in order")
+
+
+# Test that the audit log does not expose credential passwords.
+with open("test_audit_log.jsonl", "r") as f:
+    audit_text = f.read()
+
+for credential in credentials:
+    if credential["password"] != credential["username"]:
+        assert credential["password"] not in audit_text
+
+print("PASS: No credential passwords appear in the audit log")
 
 
 print("All tests passed.")
