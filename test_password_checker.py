@@ -13,8 +13,14 @@ from password_checker import (
     load_history,
     add_to_history,
     save_history,
-    breach_verdicts
+    breach_verdicts,
+    length_verdicts,
+    rotation_verdicts,
+    CHECK_NAMES,
+    run_check
 )
+
+import json
 
 
 # Load the breach list from the external file.
@@ -191,8 +197,6 @@ print("PASS: breach_verdicts returned an empty accounts list for nobody")
 
 
 # Test that no passwords appear in the verdict result.
-import json
-
 result = breach_verdicts("jsmith", credentials, known_breached)
 verdict_text = json.dumps(result)
 
@@ -202,6 +206,71 @@ for credential in credentials:
             assert credential["password"] not in verdict_text
 
 print("PASS: breach_verdicts did not include any passwords")
+
+
+
+
+# Test length_verdicts for jsmith.
+result = length_verdicts("jsmith", credentials, known_breached)
+
+assert result["username"] == "jsmith"
+assert result["accounts"][2] == {
+    "account": "VPN",
+    "long_enough": True
+}
+
+print("PASS: length_verdicts correctly identified the VPN password as long enough")
+
+
+# Test rotation_verdicts for the SSH Server account.
+result = rotation_verdicts("jsmith", credentials, known_breached)
+
+assert result["username"] == "jsmith"
+assert result["accounts"][1] == {
+    "account": "SSH Server",
+    "rotation_months": 24,
+    "rotation_ok": False
+}
+
+print("PASS: rotation_verdicts correctly identified the SSH Server rotation interval")
+
+
+# Test CHECK_NAMES contains the three supported checks in the correct order.
+assert CHECK_NAMES == [
+    "check_breach",
+    "check_length",
+    "check_rotation"
+]
+
+print("PASS: CHECK_NAMES contains all three check names in the correct order")
+
+
+# Test run_check returns the same result as breach_verdicts.
+direct_result = breach_verdicts("jsmith", credentials, known_breached)
+
+run_result = run_check(
+    "check_breach",
+    "jsmith",
+    credentials,
+    known_breached
+)
+
+assert run_result == direct_result
+
+print("PASS: run_check correctly selected breach_verdicts")
+
+
+# Test run_check refuses an unknown check name.
+result = run_check(
+    "reset_password",
+    "jsmith",
+    credentials,
+    known_breached
+)
+
+assert result == {"error": "unknown check"}
+
+print("PASS: run_check refused a name that is not one of its checks")
 
 
 print("All tests passed.")
