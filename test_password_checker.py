@@ -12,7 +12,8 @@ from password_checker import (
     load_summary,
     load_history,
     add_to_history,
-    save_history
+    save_history,
+    breach_verdicts
 )
 
 
@@ -130,13 +131,13 @@ for credential in credentials:
 print("PASS: No passwords from credentials.txt appear in the JSON file")
 
 
-#Test load_history when the file does not exist.
+# Test load_history when the file does not exist.
 history = load_history("missing_history.json")
 assert history == []
 print("PASS: load_history returned an empty list for a missing file")
 
 
-#Test adding the first audit run.
+# Test adding the first audit run.
 history = []
 history = add_to_history(history, sample, 3)
 
@@ -148,7 +149,7 @@ assert history[0]["critical_accounts"] == sample["critical_accounts"]
 print("PASS: add_to_history correctly created run 1")
 
 
-#Test that only the newest runs are kept.
+# Test that only the newest runs are kept.
 history = []
 
 for i in range(3):
@@ -158,12 +159,49 @@ assert [entry["run"] for entry in history] == [2, 3]
 print("PASS: add_to_history kept only the newest 2 runs")
 
 
-#Test saving and loading audit history.
+# Test saving and loading audit history.
 save_history(history, "test_history.json")
 loaded_history = load_history("test_history.json")
 
 assert loaded_history == history
 print("PASS: save_history and load_history returned the same history")
+
+
+# Test breach_verdicts for jsmith.
+credentials = load_credentials("credentials.txt")
+
+result = breach_verdicts("jsmith", credentials, known_breached)
+
+assert result["username"] == "jsmith"
+assert result["accounts"][0] == {
+    "account": "Gmail",
+    "on_breach_list": True
+}
+
+print("PASS: breach_verdicts marked the Gmail password as on the breach list")
+
+
+# Test a username with no accounts.
+result = breach_verdicts("nobody", credentials, known_breached)
+
+assert result["username"] == "nobody"
+assert result["accounts"] == []
+
+print("PASS: breach_verdicts returned an empty accounts list for nobody")
+
+
+# Test that no passwords appear in the verdict result.
+import json
+
+result = breach_verdicts("jsmith", credentials, known_breached)
+verdict_text = json.dumps(result)
+
+for credential in credentials:
+    if credential["username"] == "jsmith":
+        if credential["password"] != credential["username"]:
+            assert credential["password"] not in verdict_text
+
+print("PASS: breach_verdicts did not include any passwords")
 
 
 print("All tests passed.")

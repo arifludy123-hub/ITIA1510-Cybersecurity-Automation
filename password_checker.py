@@ -173,6 +173,32 @@ def save_history(history, filepath):
         json.dump(history, f, indent=2)
 
 
+def breach_verdicts(username, credentials, known_breached):
+    # Only include accounts belonging to the requested username.
+    accounts = []
+
+    for credential in credentials:
+        if credential["username"] == username:
+
+            # check_breach() returns True when a password is NOT breached.
+            # Therefore, on_breach_list must be the opposite result.
+            on_breach_list = not check_breach(
+                credential["password"],
+                known_breached
+            )
+
+            # Leave out passwords to protect sensitive information.
+            accounts.append({
+                "account": credential["account"],
+                "on_breach_list": on_breach_list
+            })
+
+    return {
+        "username": username,
+        "accounts": accounts
+    }
+
+
 def audit_password(
     account,
     username,
@@ -236,7 +262,7 @@ def audit_password(
     passed = 1 if overall_pass else 0
     failed = 0 if overall_pass else 1
 
-    # individual audit results to the report.
+    # Add individual audit results to the report.
     report_lines.append("========================================")
     report_lines.append(
         f"PASSWORD AUDIT REPORT ({report_number} of {total_credentials})"
@@ -308,7 +334,7 @@ if __name__ == "__main__":
 
     report_lines = []
 
-    #all batch audit counts and account names in one dictionary.
+    # Keep all batch audit counts and account names in one dictionary.
     summary = {
         "total": len(credentials),
         "passed": 0,
@@ -387,7 +413,7 @@ if __name__ == "__main__":
     # Save the batch summary after writing the text report.
     save_summary(summary, "audit_summary.json")
 
-    #  Load previous audit runs and add the current run.
+    # Load previous audit runs and add the current run.
     history = load_history("audit_history.json")
 
     history = add_to_history(
@@ -398,3 +424,13 @@ if __name__ == "__main__":
 
     # Save the updated history for future audit runs.
     save_history(history, "audit_history.json")
+
+    # Week 11: Generate breach verdicts for jsmith.
+    verdicts = breach_verdicts("jsmith", credentials, known_breached)
+
+    # Print the verdicts in readable JSON format.
+    print(json.dumps(verdicts, indent=2))
+
+    # Save the verdicts without exposing any passwords.
+    with open("breach_check.json", "w") as f:
+        json.dump(verdicts, f, indent=2)
