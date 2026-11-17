@@ -1,3 +1,4 @@
+
 from password_checker import (
     check_length,
     check_digit,
@@ -8,7 +9,10 @@ from password_checker import (
     load_breached,
     write_report,
     save_summary,
-    load_summary
+    load_summary,
+    load_history,
+    add_to_history,
+    save_history
 )
 
 
@@ -91,7 +95,8 @@ print("PASS: load_breached correctly returned a list")
 assert "password123" in breached
 print("PASS: load_breached correctly loaded password123")
 
-#Save and load a summary dictionary.
+
+# Save and load a summary dictionary.
 sample = {
     "total": 2,
     "passed": 1,
@@ -113,7 +118,7 @@ assert isinstance(loaded_summary["failed_accounts"], list)
 print("PASS: failed_accounts was loaded as a list")
 
 
-#Check that no password is saved in the JSON file.
+# Check that no password is saved in the JSON file.
 credentials = load_credentials("credentials.txt")
 
 with open("test_summary.json", "r") as f:
@@ -124,5 +129,41 @@ for credential in credentials:
 
 print("PASS: No passwords from credentials.txt appear in the JSON file")
 
-print("All tests passed.")
 
+#Test load_history when the file does not exist.
+history = load_history("missing_history.json")
+assert history == []
+print("PASS: load_history returned an empty list for a missing file")
+
+
+#Test adding the first audit run.
+history = []
+history = add_to_history(history, sample, 3)
+
+assert len(history) == 1
+assert history[0]["run"] == 1
+assert history[0]["passed"] == sample["passed"]
+assert history[0]["failed"] == sample["failed"]
+assert history[0]["critical_accounts"] == sample["critical_accounts"]
+print("PASS: add_to_history correctly created run 1")
+
+
+#Test that only the newest runs are kept.
+history = []
+
+for i in range(3):
+    history = add_to_history(history, sample, 2)
+
+assert [entry["run"] for entry in history] == [2, 3]
+print("PASS: add_to_history kept only the newest 2 runs")
+
+
+#Test saving and loading audit history.
+save_history(history, "test_history.json")
+loaded_history = load_history("test_history.json")
+
+assert loaded_history == history
+print("PASS: save_history and load_history returned the same history")
+
+
+print("All tests passed.")

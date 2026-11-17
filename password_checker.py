@@ -2,6 +2,7 @@
 # ITIA 1510 - Cybersecurity Automation
 
 import json
+import os
 
 
 # The policy dictionary keeps security rules in one place.
@@ -12,7 +13,8 @@ policy = {
     "max_rotation_months": 12,
     "good_rotation_months": 6,
     "require_digit": True,
-    "check_breach_list": True
+    "check_breach_list": True,
+    "history_runs": 3
 }
 
 
@@ -130,6 +132,47 @@ def load_summary(filepath):
     return summary
 
 
+def load_history(filepath):
+    # Return an empty list when the history file does not exist yet.
+    # This allows the program to run normally for the first time.
+    if not os.path.exists(filepath):
+        return []
+
+    with open(filepath, "r") as f:
+        history = json.load(f)
+
+    return history
+
+
+def add_to_history(history, summary, keep):
+    # Get the next run number from the newest entry.
+    # The history length cannot be used because old entries are trimmed.
+    if history:
+        next_run = history[-1]["run"] + 1
+    else:
+        next_run = 1
+
+    new_entry = {
+        "run": next_run,
+        "passed": summary["passed"],
+        "failed": summary["failed"],
+        "critical_accounts": summary["critical_accounts"]
+    }
+
+    history.append(new_entry)
+
+    # Keep only the newest number of runs allowed by the policy.
+    history = history[-keep:]
+
+    return history
+
+
+def save_history(history, filepath):
+    # Save the audit history as formatted JSON.
+    with open(filepath, "w") as f:
+        json.dump(history, f, indent=2)
+
+
 def audit_password(
     account,
     username,
@@ -193,7 +236,7 @@ def audit_password(
     passed = 1 if overall_pass else 0
     failed = 0 if overall_pass else 1
 
-    # Add individual audit results to the report.
+    # individual audit results to the report.
     report_lines.append("========================================")
     report_lines.append(
         f"PASSWORD AUDIT REPORT ({report_number} of {total_credentials})"
@@ -265,7 +308,7 @@ if __name__ == "__main__":
 
     report_lines = []
 
-    # Keep all batch audit counts and account names in one dictionary.
+    #all batch audit counts and account names in one dictionary.
     summary = {
         "total": len(credentials),
         "passed": 0,
@@ -341,5 +384,17 @@ if __name__ == "__main__":
 
     write_report(report_lines, "report.txt")
 
-    # Week 09: Save the batch summary after writing the text report.
+    # Save the batch summary after writing the text report.
     save_summary(summary, "audit_summary.json")
+
+    #  Load previous audit runs and add the current run.
+    history = load_history("audit_history.json")
+
+    history = add_to_history(
+        history,
+        summary,
+        policy["history_runs"]
+    )
+
+    # Save the updated history for future audit runs.
+    save_history(history, "audit_history.json")
