@@ -1,238 +1,227 @@
-def check_length(password):
-    # Checks password length against NIST SP 800-63B thresholds.
-    # Takes a password string. Returns (length_ok: bool, length_verdict: str).
+
+# Week 06 + Week 07 Password Checker
+# ITIA 1510 - Cybersecurity Automation
+
+# Import csv so the program can read the credentials and breach files.
+import csv
+
+# The policy dictionary keeps security rules in one place.
+# Keeping it outside main allows the tests to import and use it.
+policy = {
+    "min_length": 8,
+    "strong_length": 15,
+    "max_rotation_months": 12,
+    "good_rotation_months": 6,
+    "require_digit": True,
+    "check_breach_list": True
+}
+
+
+# Check the password length using the policy settings.
+# Reading limits from policy is easier to maintain than hardcoding numbers.
+def check_length(password, policy):
     password_length = len(password)
 
-    if password_length < 8:
-        length_verdict = "WEAK -- does not meet minimum length requirements"
-    elif password_length <= 11:
-        length_verdict = "MODERATE -- meets minimum but falls short of NIST recommendations"
-    elif password_length <= 14:
-        length_verdict = "GOOD -- acceptable length for most systems"
-    else:
-        length_verdict = "STRONG -- meets NIST SP 800-63B recommendations"
+    if password_length < policy["min_length"]:
+        return False, "FAIL - Password is too short."
 
-    length_ok = password_length >= 15
-    return length_ok, length_verdict
+    if password_length >= policy["strong_length"]:
+        return True, "PASS - Strong password length."
+
+    return True, "PASS - Password length is acceptable."
 
 
+# Check whether the password contains at least one number.
 def check_digit(password):
-    # Checks whether a password contains at least one digit.
-    # Takes a password string. Returns True if a digit is found, otherwise False.
-    has_digit = False
+    if any(character.isdigit() for character in password):
+        return True, "PASS - Password contains a number."
 
-    # Check each character using the loop from Week 03.
-    for char in password:
-        if char in '0123456789':
-            has_digit = True
-
-    return has_digit
+    return False, "FAIL - Password must contain a number."
 
 
+# Check whether the password contains the username.
 def check_username(password, username):
-    # Checks whether the password is different from the username.
-    # Takes a password and username string. Returns True if they differ.
-    # The password should never be the same as the username.
-    not_username = password != username
-    return not_username
+    if username.lower() in password.lower():
+        return False, "FAIL - Password contains the username."
+
+    return True, "PASS - Password does not contain the username."
 
 
-def check_rotation(rotation_interval):
-    # Checks the password rotation interval.
-    # Takes the rotation interval in months.
-    if rotation_interval > 12:
-        rotation_verdict = "WARNING -- rotation interval exceeds recommended maximum of 12 months"
-    elif rotation_interval >= 6:
-        rotation_verdict = "ACCEPTABLE -- rotation interval within recommended range"
-    else:
-        rotation_verdict = "EXCELLENT -- frequent rotation policy detected"
+# Check password rotation using the policy settings.
+def check_rotation(rotation_interval, policy):
+    if rotation_interval > policy["max_rotation_months"]:
+        return False, "FAIL - Password rotation is overdue."
 
-    rotation_ok = rotation_interval <= 12
-    return rotation_ok, rotation_verdict
+    if rotation_interval <= policy["good_rotation_months"]:
+        return True, "PASS - Password rotation is good."
+
+    return True, "PASS - Password rotation is acceptable."
 
 
+# Check whether the password appears in the known breach list.
 def check_breach(password, known_breached):
-    # Checks whether a password appears in the known breached password list.
-    # Using "in" checks whether the password exists in the list.
-    not_breached = password not in known_breached
-    return not_breached
+    if password in known_breached:
+        return False, "CRITICAL - Password found in breach list."
 
+    return True, "PASS - Password not found in breach list."
+
+
+# Load credential records from the credentials file.
 
 def load_credentials(filepath):
-    """Read the credentials file and return a list of dictionaries."""
-
     credentials = []
 
-    # with automatically closes the file, even if an error happens.
-    with open(filepath, "r") as f:
-        for line in f:
-            line = line.strip()
+    with open(filepath, "r", newline="") as file:
+        reader = csv.reader(file)
 
-            # Skip blank lines so they are not treated as credentials.
-            if line == "":
+        for row in reader:
+            # Skip empty lines.
+            if not row:
                 continue
 
-            fields = line.split(",")
-
+            # Store each row as a dictionary.
             credentials.append({
-                "account": fields[0],
-                "username": fields[1],
-                "password": fields[2],
-                "rotation_interval": int(fields[3])
+                "account": row[0],
+                "username": row[1],
+                "password": row[2],
+                "rotation_interval": int(row[3])
             })
 
     return credentials
 
 
-def load_breached(filepath):
-    """Read the breached password file and return a list of passwords."""
 
+# Load known breached passwords from the breach file.
+def load_breached(filepath):
     known_breached = []
 
-    with open(filepath, "r") as f:
-        for line in f:
-            line = line.strip()
+    with open(filepath, "r") as file:
+        for line in file:
+            password = line.strip()
 
-            # Skip blank lines in the breach list.
-            if line != "":
-                known_breached.append(line)
+            if password:
+                known_breached.append(password)
 
     return known_breached
 
 
+# Write the audit report to a text file.
 def write_report(report_lines, filepath):
-    """Write each report line to the report file."""
-
-    with open(filepath, "w") as f:
+    with open(filepath, "w") as file:
         for line in report_lines:
-            f.write(line + "\n")
+            file.write(line + "\n")
 
 
+# Audit one password using the security policy.
 def audit_password(
-    account,
-    username,
     password,
+    username,
     rotation_interval,
     known_breached,
+    policy,
     report_number,
     total_credentials,
     report_lines
 ):
-    # Audits one password using all checking functions.
-    # Returns passed, failed, and critical counters.
+    results = []
+    critical = False
 
-    password_length = len(password)
-    length_score = password_length * 10
-    rotation_count = 36 // rotation_interval
+    # Check password length.
+    length_passed, length_message = check_length(password, policy)
+    results.append(length_message)
 
-    length_ok, length_verdict = check_length(password)
-    has_digit = check_digit(password)
-    not_username = check_username(password, username)
-    rotation_ok, rotation_verdict = check_rotation(rotation_interval)
-    not_breached = check_breach(password, known_breached)
-
-    passed = 0
-    failed = 0
-    critical = 0
-
-    # A username match is a critical security problem.
-    if not_username == False:
-        critical = 1
-
-    # A breached password is also a critical security problem.
-    if not_breached == False:
-        critical = 1
-
-    overall_pass = (
-        length_ok
-        and has_digit
-        and not_username
-        and not_breached
-        and rotation_ok
-    )
-
-    if overall_pass:
-        passed = 1
+    # Check for a number only when the policy requires it.
+    if policy.get("require_digit", False):
+        digit_passed, digit_message = check_digit(password)
+        results.append(digit_message)
     else:
-        failed = 1
+        digit_passed = True
+        results.append("PASS - Number requirement is disabled.")
 
-    # Store the report lines instead of printing them directly.
-    report_lines.append("========================================")
+    # Check whether the password contains the username.
+    username_passed, username_message = check_username(password, username)
+    results.append(username_message)
+
+    # Check password rotation.
+    rotation_passed, rotation_message = check_rotation(
+        rotation_interval, policy
+    )
+    results.append(rotation_message)
+
+    # Check the breach list only when the policy enables it.
+    if policy.get("check_breach_list", False):
+        breach_passed, breach_message = check_breach(
+            password, known_breached
+        )
+        results.append(breach_message)
+
+        if not breach_passed:
+            critical = True
+    else:
+        breach_passed = True
+        results.append("PASS - Breach-list checking is disabled.")
+
+    # Count how many checks passed or failed.
+    checks_passed = all([
+        length_passed,
+        digit_passed,
+        username_passed,
+        rotation_passed,
+        breach_passed
+    ])
+
+    if not length_passed or not username_passed:
+        critical = True
+
+    # Add the audit results to the report.
+    report_lines.append("")
     report_lines.append(
-        f"   PASSWORD AUDIT REPORT  ({report_number} of {total_credentials})"
+        f"Credential {report_number} of {total_credentials}"
     )
-    report_lines.append("========================================")
-    report_lines.append(f"Account:           {account}")
-    report_lines.append(f"Username:          {username}")
-    report_lines.append(f"Password length:   {password_length} characters")
-    report_lines.append(f"Length score:      {length_score} points")
-    report_lines.append(f"Rotation interval: {rotation_interval} months")
-    report_lines.append(f"Rotations (3 yr):  {rotation_count}")
-    report_lines.append("----------------------------------------")
-    report_lines.append(f"Length verdict:    {length_verdict}")
+    report_lines.append("Username: " + username)
+    report_lines.append("Password audit:")
 
-    if has_digit:
-        report_lines.append("Digit found:       YES")
+    for result in results:
+        report_lines.append("  " + result)
+
+    if critical:
+        report_lines.append("RESULT: CRITICAL")
+    elif checks_passed:
+        report_lines.append("RESULT: PASS")
     else:
-        report_lines.append("Digit found:       NO")
+        report_lines.append("RESULT: FAIL")
 
-    if not_username:
-        report_lines.append("Username match:    NO")
-    else:
-        report_lines.append("Username match:    YES")
-
-    if not_breached:
-        report_lines.append(
-            "Breach check:      PASS -- password not found in known breach list"
-        )
-    else:
-        report_lines.append(
-            "Breach check:      CRITICAL -- password found in known breach list"
-        )
-
-    report_lines.append(f"Rotation verdict:  {rotation_verdict}")
-
-    if not_username == False:
-        report_lines.append(
-            "CRITICAL:          password must not match username"
-        )
-
-    report_lines.append("----------------------------------------")
-
-    if overall_pass:
-        report_lines.append(
-            "OVERALL: PASS -- password meets all checked criteria"
-        )
-    else:
-        report_lines.append(
-            "OVERALL: FAIL -- see findings above"
-        )
-
-    report_lines.append("========================================")
-
-    return passed, failed, critical
+    return checks_passed, critical
 
 
+# Main program starts here.
 if __name__ == "__main__":
 
-    # Load credentials from the external credentials file.
+    # Week 07 reads credentials and breached passwords from files.
     credentials = load_credentials("credentials.txt")
-
-    # Load breached passwords from the external breach file.
     known_breached = load_breached("breached.txt")
-
-    # Store every line that will be printed and written to report.txt.
-    report_lines = []
-
-    total_pass = 0
-    total_fail = 0
-    critical_count = 0
-
-    failed_accounts = []
-    critical_accounts = []
 
     total_credentials = len(credentials)
 
+    # The summary dictionary keeps all audit totals together.
+    summary = {
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "critical": 0,
+        "failed_accounts": [],
+        "critical_accounts": []
+    }
+
+    report_lines = []
+
+    report_lines.append("PASSWORD SECURITY AUDIT REPORT")
+    report_lines.append("=" * 40)
+    report_lines.append(
+        "NOTE: Credentials and breach list are loaded from files."
+    )
+
+    # Process each credential using its dictionary keys.
     for report_number, credential in enumerate(credentials, start=1):
 
         account = credential["account"]
@@ -240,58 +229,48 @@ if __name__ == "__main__":
         password = credential["password"]
         rotation_interval = credential["rotation_interval"]
 
-        passed, failed, critical = audit_password(
-            account,
-            username,
+        passed, critical = audit_password(
             password,
+            username,
             rotation_interval,
             known_breached,
+            policy,
             report_number,
             total_credentials,
             report_lines
         )
 
-        total_pass += passed
-        total_fail += failed
-        critical_count += critical
+        summary["total"] += 1
 
-        if failed:
-            failed_accounts.append(account)
+        if passed:
+            summary["passed"] += 1
+        else:
+            summary["failed"] += 1
+            summary["failed_accounts"].append(account)
 
         if critical:
-            critical_accounts.append(account)
+            summary["critical"] += 1
+            summary["critical_accounts"].append(account)
 
-    # Add the batch summary after all individual audits.
+    # Print the final audit summary.
     report_lines.append("")
-    report_lines.append("========================================")
-    report_lines.append("     BATCH AUDIT SUMMARY")
-    report_lines.append("========================================")
-    report_lines.append(f"Credentials audited: {total_credentials}")
-    report_lines.append(f"Passed:              {total_pass}")
-    report_lines.append(f"Failed:              {total_fail}")
-    report_lines.append("----------------------------------------")
+    report_lines.append("=" * 40)
+    report_lines.append("AUDIT SUMMARY")
+    report_lines.append("=" * 40)
+    report_lines.append(f"Credentials audited: {summary.get('total', 0)}")
+    report_lines.append(f"Passed: {summary['passed']}")
+    report_lines.append(f"Failed: {summary['failed']}")
+    report_lines.append(
+        "Failed accounts: " + ", ".join(summary["failed_accounts"])
+    )
+    report_lines.append(f"Critical flags: {summary['critical']}")
+    report_lines.append(
+        "Critical accounts: " + ", ".join(summary["critical_accounts"])
+    )
 
-    if failed_accounts:
-        report_lines.append(
-            "Failed accounts:     " + ", ".join(failed_accounts)
-        )
-    else:
-        report_lines.append("Failed accounts:     None")
-
-    report_lines.append(f"Critical flags:      {critical_count}")
-
-    if critical_accounts:
-        report_lines.append(
-            "Critical accounts:   " + ", ".join(critical_accounts)
-        )
-    else:
-        report_lines.append("Critical accounts:   None")
-
-    report_lines.append("========================================")
-
-    # Print the same lines that will be saved to report.txt.
+    # Display the report in the terminal.
     for line in report_lines:
         print(line)
 
-    # Write the complete report to report.txt.
+    # Save the same report to report.txt.
     write_report(report_lines, "report.txt")
