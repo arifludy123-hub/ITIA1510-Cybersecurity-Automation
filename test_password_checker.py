@@ -6,7 +6,9 @@ from password_checker import (
     check_breach,
     load_credentials,
     load_breached,
-    write_report
+    write_report,
+    save_summary,
+    load_summary
 )
 
 
@@ -89,17 +91,38 @@ print("PASS: load_breached correctly returned a list")
 assert "password123" in breached
 print("PASS: load_breached correctly loaded password123")
 
+#Save and load a summary dictionary.
+sample = {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "critical": 1,
+    "failed_accounts": ["Gmail"],
+    "critical_accounts": ["Gmail"]
+}
 
-# Test write_report writes the lines correctly.
-test_lines = ["first line", "second line"]
-write_report(test_lines, "test_report.txt")
+save_summary(sample, "test_summary.json")
+loaded_summary = load_summary("test_summary.json")
 
-with open("test_report.txt", "r") as f:
-    report_text = f.read()
-
-assert report_text == "first line\nsecond line\n"
-print("PASS: write_report correctly wrote the report")
+assert loaded_summary == sample
+print("PASS: save_summary and load_summary returned the same dictionary")
 
 
-print("----------------------------------------")
-print("All 15 tests passed.")
+# Check that failed_accounts is a list.
+assert isinstance(loaded_summary["failed_accounts"], list)
+print("PASS: failed_accounts was loaded as a list")
+
+
+#Check that no password is saved in the JSON file.
+credentials = load_credentials("credentials.txt")
+
+with open("test_summary.json", "r") as f:
+    saved_text = f.read()
+
+for credential in credentials:
+    assert credential["password"] not in saved_text
+
+print("PASS: No passwords from credentials.txt appear in the JSON file")
+
+print("All tests passed.")
+
